@@ -37,8 +37,7 @@
             <!-- Sidebar as Navbar -->
             <div class="sidebar">
                 <div class="user-profile">
-                    <!-- Adjusted path to match GitHub Pages structure -->
-                    <img id="userAvatar" src="/chat-app/assets/images/default-avatar.png" alt="User avatar">
+                    <div id="userAvatar" class="avatar"></div> <!-- Replaced <img> with dynamic avatar div -->
                     <div class="user-info">
                         <div id="userName" class="user-name">Not logged in</div>
                         <div id="userEmail" class="user-status"></div>
@@ -103,6 +102,31 @@
         }
         updateClock();
         setInterval(updateClock, 1000);
+    </script>
+
+    <!-- Dynamic Avatar Script (Inline for now) -->
+    <script>
+        function generateAvatar() {
+            const username = document.getElementById('userName').textContent;
+            const avatar = document.getElementById('userAvatar');
+            if (!avatar || !username || username === 'Not logged in') return;
+
+            let avatarText = '';
+            const capitalLetters = username.match(/[A-Z]/g) || [];
+            if (capitalLetters.length >= 2) {
+                avatarText = capitalLetters.slice(0, 2).join('');
+            } else {
+                avatarText = username.slice(0, 2).toUpperCase();
+            }
+
+            const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+            avatar.style.backgroundColor = randomColor;
+            avatar.textContent = avatarText;
+        }
+
+        // Call on page load and after login (to be integrated with auth.js)
+        window.addEventListener('load', generateAvatar);
+        // You can trigger this again in auth.js after login updates userName
     </script>
 </body>
 </html>

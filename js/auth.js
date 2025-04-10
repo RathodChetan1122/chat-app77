@@ -267,6 +267,24 @@ class Auth {
         }
     }
 
+    // New method to generate avatar
+    generateAvatar(username) {
+        const avatar = document.getElementById('userAvatar');
+        if (!avatar || !username || username === 'Not logged in') return;
+
+        let avatarText = '';
+        const capitalLetters = username.match(/[A-Z]/g) || [];
+        if (capitalLetters.length >= 2) {
+            avatarText = capitalLetters.slice(0, 2).join('');
+        } else {
+            avatarText = username.slice(0, 2).toUpperCase();
+        }
+
+        const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+        avatar.style.backgroundColor = randomColor;
+        avatar.textContent = avatarText;
+    }
+
     async handleAuthStateChange(user) {
         this.currentUser = user;
         if (user) {
@@ -280,8 +298,12 @@ class Auth {
                     userData.username || user.displayName || user.email;
                 document.getElementById('userEmail').textContent = user.email;
                 
+                // Generate avatar based on username
+                this.generateAvatar(document.getElementById('userName').textContent);
+
                 if (user.photoURL) {
-                    document.getElementById('userAvatar').src = user.photoURL;
+                    // Optional: Use photoURL if available, but we'll prioritize our avatar
+                    // document.getElementById('userAvatar').src = user.photoURL;
                 }
 
                 if (window.chatInstance && typeof window.chatInstance.initialize === 'function') {
@@ -306,7 +328,7 @@ class Auth {
             this.authModal.style.display = 'flex';
             document.getElementById('userName').textContent = 'Not logged in';
             document.getElementById('userEmail').textContent = '';
-            document.getElementById('userAvatar').src = 'https://via.placeholder.com/50';
+            this.generateAvatar('Not logged in'); // Set default avatar
             
             this.isRegistering = false;
             this.toggleRegisterBtn.textContent = "Register";

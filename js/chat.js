@@ -37,7 +37,7 @@ class Chat {
             this.socket.on('typing:started', ({ userId }) => this.handleTypingStarted(userId));
             this.socket.on('typing:stopped', ({ userId }) => this.handleTypingStopped(userId));
             this.socket.on('request:response', (data) => this.handleRequestResponse(data.chatId, data.status));
-            this.socket.on('friend:request:received', (data) => this.handleFriendRequestReceived(data)); // New handler
+            this.socket.on('friend:request:received', (data) => this.handleFriendRequestReceived(data));
             this.socket.on('friend:request:response', (data) => 
                 this.handleFriendRequestResponse(data.requesterId, data.status)
             );
@@ -576,56 +576,57 @@ class Chat {
     }
 
     async searchFriends() {
-    const searchTerm = this.friendSearchInput.value.trim().toLowerCase();
-    if (!searchTerm) {
-        alert('Please enter a username or mobile number!');
-        return;
-    }
-
-    try {
-        // Get all users and filter client-side for better partial matches
-        const usersSnapshot = await this.db.collection('users').get();
-        
-        this.friendSearchResults.innerHTML = '';
-        let foundUsers = false;
-
-        usersSnapshot.forEach(doc => {
-            const user = { id: doc.id, ...doc.data() };
-            // Skip current user
-            if (user.id === this.currentUser.uid) return;
-
-            // Check if username or mobile contains search term
-            const username = (user.username || '').toLowerCase();
-            const mobile = (user.mobile || '').toLowerCase();
-            
-            if (username.includes(searchTerm) || mobile.includes(searchTerm)) {
-                foundUsers = true;
-                const friendItem = document.createElement('div');
-                friendItem.className = 'friend-item';
-                friendItem.innerHTML = `
-                    <span>${user.username} ${user.mobile ? `(${user.mobile})` : ''}</span>
-                    <button class="friend-request-btn" data-uid="${user.id}">Send Friend Request</button>
-                `;
-                
-                const button = friendItem.querySelector('.friend-request-btn');
-                button.addEventListener('click', (e) => {
-                    const uid = e.currentTarget.getAttribute('data-uid');
-                    this.sendFriendRequest(uid);
-                });
-                
-                this.friendSearchResults.appendChild(friendItem);
-            }
-        });
-
-        if (!foundUsers) {
-            this.friendSearchResults.innerHTML = '<p>No users found.</p>';
+        const searchTerm = this.friendSearchInput.value.trim().toLowerCase();
+        if (!searchTerm) {
+            alert('Please enter a username or mobile number!');
+            return;
         }
 
-    } catch (error) {
-        console.error('Error searching friends:', error);
-        this.friendSearchResults.innerHTML = `<p>Error: ${error.message}</p>`;
+        try {
+            // Get all users and filter client-side for better partial matches
+            const usersSnapshot = await this.db.collection('users').get();
+            
+            this.friendSearchResults.innerHTML = '';
+            let foundUsers = false;
+
+            usersSnapshot.forEach(doc => {
+                const user = { id: doc.id, ...doc.data() };
+                // Skip current user
+                if (user.id === this.currentUser.uid) return;
+
+                // Check if username or mobile contains search term
+                const username = (user.username || '').toLowerCase();
+                const mobile = (user.mobile || '').toLowerCase();
+                
+                if (username.includes(searchTerm) || mobile.includes(searchTerm)) {
+                    foundUsers = true;
+                    const friendItem = document.createElement('div');
+                    friendItem.className = 'friend-item';
+                    friendItem.innerHTML = `
+                        <span>${user.username} ${user.mobile ? `(${user.mobile})` : ''}</span>
+                        <button class="friend-request-btn" data-uid="${user.id}">Send Friend Request</button>
+                    `;
+                    
+                    const button = friendItem.querySelector('.friend-request-btn');
+                    button.addEventListener('click', (e) => {
+                        const uid = e.currentTarget.getAttribute('data-uid');
+                        this.sendFriendRequest(uid);
+                    });
+                    
+                    this.friendSearchResults.appendChild(friendItem);
+                }
+            });
+
+            if (!foundUsers) {
+                this.friendSearchResults.innerHTML = '<p>No users found.</p>';
+            }
+
+        } catch (error) {
+            console.error('Error searching friends:', error);
+            this.friendSearchResults.innerHTML = `<p>Error: ${error.message}</p>`;
+        }
     }
-}
+
     async sendFriendRequest(friendUid) {
         // Debugging - let's see what we're receiving
         console.log('Friend UID received:', friendUid);
@@ -764,6 +765,18 @@ class Chat {
         } else {
             alert(`Friend request from ${requesterId} rejected.`);
         }
+    }
+
+    // New reset method to handle logout
+    reset() {
+        this.currentChat = null;
+        this.currentUser = null;
+        if (this.messagesContainer) this.messagesContainer.innerHTML = '';
+        if (this.currentChatName) this.currentChatName.textContent = 'Select a chat';
+        if (this.messageInput) this.messageInput.disabled = true;
+        if (this.typingUsers) this.typingUsers.clear();
+        if (this.typingIndicator) this.typingIndicator.textContent = '';
+        console.log('Chat reset');
     }
 }
 

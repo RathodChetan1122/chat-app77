@@ -657,3 +657,21 @@ body {
 .sidebar-overlay {
     display: none; /* Disabled unless explicitly needed */
 }
+
+.avatar,
+.chat-item-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #8a4af3; /* Default, overridden by JS */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+    font-size: 1.1em;
+    border: 2px solid var(--primary-color);
+    overflow: hidden;
+    text-transform: uppercase;
+}
