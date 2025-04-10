@@ -504,7 +504,7 @@ class Chat {
 
     displayMessage(message, isSent = false) {
         const messageElement = document.createElement('div');
-        messageElement.className = `message ${message.senderId === this.currentUser?.uid ? 'sent' : 'received'}`;
+        messageElement.className = `message ${message.senderId === this.currentUser?.uid ? 'sent' : 'received'} new-message`;
         const textElement = document.createElement('span');
         textElement.textContent = message.text;
         const nameElement = document.createElement('small');
@@ -512,6 +512,8 @@ class Chat {
         messageElement.appendChild(nameElement);
         messageElement.appendChild(textElement);
         this.messagesContainer.appendChild(messageElement);
+        // Remove new-message class after animation
+        setTimeout(() => messageElement.classList.remove('new-message'), 300);
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
 
