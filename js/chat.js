@@ -505,8 +505,16 @@ class Chat {
     displayMessage(message, isSent = false) {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${message.senderId === this.currentUser?.uid ? 'sent' : 'received'} new-message`;
+        
+        // Split text if no spaces and length > 1
+        let displayText = message.text;
+        if (!/\s/.test(displayText) && displayText.length > 1) {
+            const halfLength = Math.ceil(displayText.length / 2);
+            displayText = `${displayText.slice(0, halfLength)}\n${displayText.slice(halfLength)}`;
+        }
+
         const textElement = document.createElement('span');
-        textElement.textContent = message.text;
+        textElement.textContent = displayText;
         const nameElement = document.createElement('small');
         nameElement.textContent = message.senderName;
         messageElement.appendChild(nameElement);

@@ -297,6 +297,8 @@ body {
     opacity: 0; /* Start hidden for animation */
     transform: translateY(20px); /* Start slightly below */
     animation: fadeInSlide 0.3s ease forwards; /* Animation on add */
+    word-wrap: break-word; /* Allow wrapping at word boundaries */
+    overflow-wrap: break-word; /* Modern equivalent */
 }
 
 .message.sent {
