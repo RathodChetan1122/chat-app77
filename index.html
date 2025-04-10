@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatApp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&family=Montserrat:wght@600&family=Poppins:wght@600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Auth Modal -->
+        <div id="authModal" class="auth-modal">
+            <div class="auth-container">
+                <h2>Welcome to ChatApp</h2>
+                <button id="googleLogin" class="auth-button">
+                    <img src="https://www.google.com/favicon.ico" alt="Google" width="20" height="20">
+                    Login with Google
+                </button>
+                <div class="divider">or</div>
+                <form id="emailAuthForm">
+                    <input type="email" id="emailInput" name="email" placeholder="Email" style="display: none;">
+                    <input type="text" id="usernameInput" name="username" placeholder="Username (Permanent)" style="display: none;">
+                    <input type="tel" id="mobileInput" name="mobile" placeholder="Mobile Number" pattern="[0-9]{10}" style="display: none;">
+                    <input type="password" id="passwordInput" name="password" placeholder="Password" required>
+                    <button type="submit" class="auth-button">Login</button>
+                </form>
+                <button id="toggleRegister" class="toggle-button">Register</button>
+            </div>
+        </div>
+
+        <!-- Main App Container -->
+        <div class="main-container">
+            <!-- Mobile Navbar Toggle Button -->
+            <button id="navToggle" class="nav-toggle">☰</button>
+
+            <!-- Sidebar as Navbar -->
+            <div class="sidebar">
+                <div class="user-profile">
+                    <!-- Adjusted path to match GitHub Pages structure -->
+                    <img id="userAvatar" src="/chat-app/assets/images/default-avatar.png" alt="User avatar">
+                    <div class="user-info">
+                        <div id="userName" class="user-name">Not logged in</div>
+                        <div id="userEmail" class="user-status"></div>
+                        <div id="currentTime" class="user-status">UTC: 2025-04-09 05:56:02</div>
+                    </div>
+                    <button id="logoutBtn" class="edit-profile">Logout</button>
+                </div>
+                <div id="chatList" class="chat-list"></div>
+                <button id="newChatBtn" class="new-chat-btn">New Chat</button>
+                <button id="friendSearchBtn" class="new-chat-btn">Search Friends</button>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <div class="chat-header">
+                    <h2 id="currentChatName">Select a chat</h2>
+                    <div id="chatInfo" class="chat-info"></div>
+                </div>
+                <div id="messagesContainer" class="messages-container"></div>
+                <form id="messageForm" class="message-form">
+                    <div class="message-input-container">
+                        <input type="text" id="messageInput" name="message" placeholder="Type a message..." disabled>
+                    </div>
+                    <button type="submit">Send</button>
+                </form>
+            </div>
+
+            <!-- Friend Search Modal -->
+            <div id="friendSearchModal" class="auth-modal" style="display: none;">
+                <div class="auth-container">
+                    <h2>Search Friends</h2>
+                    <form id="friendSearchForm">
+                        <input type="text" id="friendSearchInput" name="friendSearch" placeholder="Username or Mobile" required>
+                        <button type="submit" class="auth-button">Search</button>
+                    </form>
+                    <div id="friendSearchResults"></div>
+                    <button type="button" class="toggle-button" id="closeFriendSearch">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    
+    <!-- Socket.IO Client -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <!-- App Scripts -->
+    <script src="js/init.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/chat.js"></script>
+
+    <!-- Clock Update Script -->
+    <script>
+        function updateClock() {
+            const now = new Date();
+            const formatted = now.toISOString().replace('T', ' ').substr(0, 19);
+            document.getElementById('currentTime').textContent = 'UTC: ' + formatted;
+        }
+        updateClock();
+        setInterval(updateClock, 1000);
+    </script>
+</body>
+</html>
