@@ -6,6 +6,8 @@ class Chat {
         this.socket = null;
         this.typingUsers = new Set();
         this.typingTimeout = null;
+        this.replyingTo = null; // Track the message being replied to
+        this.highlightTimeout = null; // For highlighting pinned message
 
         // Initialize Socket.IO with error handling
         this.initializeSocket();
@@ -41,6 +43,8 @@ class Chat {
             this.socket.on('friend:request:response', (data) => 
                 this.handleFriendRequestResponse(data.requesterId, data.status)
             );
+            this.socket.on('message:update', (data) => this.handleMessageUpdate(data));
+            this.socket.on('message:delete', (data) => this.handleMessageDelete(data));
 
         } catch (error) {
             console.error('Socket initialization failed:', error);
@@ -67,7 +71,21 @@ class Chat {
             this.typingIndicator = document.createElement('div');
             this.typingIndicator.id = 'typingIndicator';
             this.typingIndicator.className = 'typing-indicator';
-            this.messagesContainer.prepend(this.typingIndicator);
+            this.messagesContainer.appendChild(this.typingIndicator); // Append after pinned display
+            console.log('Typing indicator created and appended');
+        }
+
+        // Create pinned message display if missing
+        if (this.messagesContainer && !document.getElementById('pinnedMessageDisplay')) {
+            this.pinnedMessageDisplay = document.createElement('div');
+            this.pinnedMessageDisplay.id = 'pinnedMessageDisplay';
+            this.pinnedMessageDisplay.className = 'pinned-message';
+            this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild); // Insert at top
+            console.log('Pinned message display created and inserted at top');
+        } else {
+            this.pinnedMessageDisplay = document.getElementById('pinnedMessageDisplay');
+            this.pinnedMessageDisplay.classList.remove('hidden'); // Ensure it's visible by default
+            console.log('Pinned message display found in DOM');
         }
 
         // Make sure sidebar is initially visible on desktop and hidden on mobile
@@ -85,19 +103,12 @@ class Chat {
         
         const isMobile = window.innerWidth <= 768;
         if (isMobile) {
-            // On mobile, sidebar should be hidden by default
             this.sidebar.classList.remove('active');
-            // Add appropriate mobile styling
             this.sidebar.classList.add('mobile-sidebar');
-            
-            // Make sure the main content adjusts
             document.querySelector('.chat-container')?.classList.add('full-width');
         } else {
-            // On desktop, sidebar should be visible by default
             this.sidebar.classList.add('active');
             this.sidebar.classList.remove('mobile-sidebar');
-            
-            // Restore normal content width
             document.querySelector('.chat-container')?.classList.remove('full-width');
         }
     }
@@ -136,8 +147,6 @@ class Chat {
         if (this.navToggle && this.sidebar) {
             this.navToggle.addEventListener('click', () => {
                 this.sidebar.classList.toggle('active');
-                
-                // On mobile, when sidebar is activated, add overlay
                 if (window.innerWidth <= 768) {
                     if (this.sidebar.classList.contains('active')) {
                         this.createOrShowOverlay();
@@ -152,16 +161,47 @@ class Chat {
         document.addEventListener('click', (e) => {
             const isMobile = window.innerWidth <= 768;
             if (isMobile && this.sidebar && this.sidebar.classList.contains('active')) {
-                // Check if click is outside sidebar and not on the toggle button
                 if (!this.sidebar.contains(e.target) && e.target !== this.navToggle) {
                     this.sidebar.classList.remove('active');
                     this.hideOverlay();
                 }
             }
         });
+
+        // Message options (hover for desktop, long-press for mobile)
+        this.messagesContainer.addEventListener('mouseover', (e) => {
+            if (window.innerWidth > 768) { // Desktop
+                const messageElement = e.target.closest('.message');
+                if (messageElement && !messageElement.querySelector('.message-options')) {
+                    this.showMessageOptions(messageElement);
+                }
+            }
+        });
+
+        this.messagesContainer.addEventListener('touchstart', (e) => {
+            if (window.innerWidth <= 768) { // Mobile
+                const messageElement = e.target.closest('.message');
+                if (messageElement) {
+                    this.startLongPress(messageElement, e);
+                }
+            }
+        }, { passive: true });
+
+        this.messagesContainer.addEventListener('touchend', () => {
+            clearTimeout(this.longPressTimeout);
+        });
+
+        // Cancel reply on input focus if no reply is intended
+        this.messageInput.addEventListener('focus', () => {
+            if (!this.messageInput.value.trim()) {
+                this.cancelReply();
+            }
+        });
+
+        // Pinned message display click listener
+        this.pinnedMessageDisplay?.addEventListener('click', () => this.navigateToPinnedMessage());
     }
 
-    // Create overlay for mobile sidebar
     createOrShowOverlay() {
         let overlay = document.getElementById('sidebar-overlay');
         if (!overlay) {
@@ -169,8 +209,6 @@ class Chat {
             overlay.id = 'sidebar-overlay';
             overlay.className = 'sidebar-overlay';
             document.body.appendChild(overlay);
-            
-            // Close sidebar when overlay is clicked
             overlay.addEventListener('click', () => {
                 this.sidebar.classList.remove('active');
                 this.hideOverlay();
@@ -179,7 +217,6 @@ class Chat {
         overlay.style.display = 'block';
     }
 
-    // Hide the overlay
     hideOverlay() {
         const overlay = document.getElementById('sidebar-overlay');
         if (overlay) {
@@ -187,14 +224,11 @@ class Chat {
         }
     }
 
-    // Typing detection method
     handleTypingDetection() {
-        // Clear previous timeout
         if (this.typingTimeout) {
             clearTimeout(this.typingTimeout);
         }
 
-        // Emit typing started event if in a chat
         if (this.currentChat && this.socket) {
             this.socket.emit('typing:start', {
                 chatId: this.currentChat,
@@ -203,7 +237,6 @@ class Chat {
             });
         }
 
-        // Set timeout to stop typing after 2 seconds
         this.typingTimeout = setTimeout(() => {
             if (this.currentChat && this.socket) {
                 this.socket.emit('typing:stop', {
@@ -214,9 +247,7 @@ class Chat {
         }, 2000);
     }
 
-    // Typing handlers
     handleTypingStarted(userId) {
-        // Add user to typing set
         if (userId !== this.currentUser.uid) {
             this.typingUsers.add(userId);
             this.updateTypingIndicator();
@@ -224,7 +255,6 @@ class Chat {
     }
 
     handleTypingStopped(userId) {
-        // Remove user from typing set
         this.typingUsers.delete(userId);
         this.updateTypingIndicator();
     }
@@ -242,33 +272,26 @@ class Chat {
             mobile: user.mobile || ''
         };
 
-        // Update UI
         document.getElementById('userName').textContent = this.currentUser.username;
         document.getElementById('userEmail').textContent = this.currentUser.email;
         this.messageInput && (this.messageInput.disabled = false);
 
-        // Initialize socket connection if not already established
         if (!this.socket?.connected) {
             this.initializeSocket();
         } else {
-            // Emit user connect if socket already connected
             this.socket.emit('user:connect', { userId: this.currentUser.uid });
         }
 
-        // Listen for friend requests
         this.listenForFriendRequests();
-        
         this.loadChats();
     }
 
     async loadChats() {
         try {
             console.log('Attempting to load all chats...');
-            // Get both direct chats the user participates in and pending requests
             const chatsSnapshot = await this.db.collection('chats')
                 .where('participants', 'array-contains', this.currentUser.uid)
                 .get();
-                
             console.log('Chats fetched:', chatsSnapshot.size, 'documents');
             this.chatList.innerHTML = '';
             if (chatsSnapshot.empty) {
@@ -305,7 +328,6 @@ class Chat {
 
         div.textContent = chatName;
         
-        // Add status indicator for pending friend requests
         if (chat.status === 'pending') {
             if (chat.creatorId === this.currentUser.uid) {
                 const pendingLabel = document.createElement('span');
@@ -331,7 +353,6 @@ class Chat {
             if (isParticipant) {
                 div.addEventListener('click', () => {
                     this.selectChat(chat.id);
-                    // On mobile, auto-close the sidebar after selecting a chat
                     if (window.innerWidth <= 768 && this.sidebar) {
                         this.sidebar.classList.remove('active');
                         this.hideOverlay();
@@ -392,25 +413,32 @@ class Chat {
                 .orderBy('timestamp')
                 .get();
 
-            const tempIndicator = this.typingIndicator;
-            this.messagesContainer.innerHTML = '';
-            if (this.messagesContainer && tempIndicator) {
-                this.messagesContainer.insertBefore(tempIndicator, this.messagesContainer.firstChild);
-                console.log('Re-added typingIndicator after loadMessages:', tempIndicator);
-            } else if (this.messagesContainer) {
+            this.messagesContainer.innerHTML = ''; // Clear existing content
+            if (this.typingIndicator) {
+                this.messagesContainer.appendChild(this.typingIndicator); // Re-append typing indicator
+            } else {
                 this.typingIndicator = document.createElement('div');
                 this.typingIndicator.id = 'typingIndicator';
                 this.typingIndicator.className = 'typing-indicator';
-                this.messagesContainer.insertBefore(this.typingIndicator, this.messagesContainer.firstChild);
-                console.log('Created new typingIndicator after loadMessages:', this.typingIndicator);
+                this.messagesContainer.appendChild(this.typingIndicator);
+                console.log('New typing indicator created');
             }
+            this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild); // Ensure pinned display is at the top
+            console.log('Pinned message display re-positioned at top');
 
+            // Load pinned messages first
+            const pinnedMessages = [];
             messagesSnapshot.forEach(doc => {
-                const message = doc.data();
-                const senderName = message.senderName || 'Unknown';
-                this.displayMessage({ ...message, senderName });
+                const message = { ...doc.data(), id: doc.id };
+                if (message.pinned) {
+                    pinnedMessages.push(message);
+                } else {
+                    this.displayMessage(message, doc.id);
+                }
             });
+            pinnedMessages.forEach(message => this.displayMessage(message, message.id));
 
+            this.updatePinnedMessageDisplay(pinnedMessages.length > 0 ? pinnedMessages[pinnedMessages.length - 1] : null);
             this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
         } catch (error) {
             console.error('Error loading messages:', error);
@@ -451,22 +479,27 @@ class Chat {
                 text: messageText,
                 senderId: this.currentUser.uid,
                 senderName: this.currentUser.username || this.currentUser.email,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                replyToId: this.replyingTo ? this.replyingTo.id : null,
+                replyToText: this.replyingTo ? this.replyingTo.text : null,
+                replyToSender: this.replyingTo ? this.replyingTo.senderName : null
             };
             console.log('Sending message:', message);
 
-            await this.db.collection('chats')
+            const messageRef = await this.db.collection('chats')
                 .doc(this.currentChat)
                 .collection('messages')
                 .add(message);
 
             this.socket?.emit('message:send', {
                 ...message,
-                chatId: this.currentChat
+                chatId: this.currentChat,
+                messageId: messageRef.id
             });
 
             this.messageInput.value = '';
-            this.displayMessage(message, true);
+            this.displayMessage(message, messageRef.id);
+            this.cancelReply(); // Clear reply state after sending
         } catch (error) {
             console.error('Error sending message:', error.code, error.message);
             alert(`Error sending message: ${error.message}`);
@@ -502,32 +535,79 @@ class Chat {
         }
     }
 
-    displayMessage(message, isSent = false) {
+    displayMessage(message, messageId) {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${message.senderId === this.currentUser?.uid ? 'sent' : 'received'} new-message`;
-        
-        // Split text if no spaces and length > 1
-        let displayText = message.text;
-        if (!/\s/.test(displayText) && displayText.length > 1) {
-            const halfLength = Math.ceil(displayText.length / 2);
-            displayText = `${displayText.slice(0, halfLength)}\n${displayText.slice(halfLength)}`;
-        }
+        messageElement.dataset.messageId = messageId; // Store message ID for replies and options
 
-        const textElement = document.createElement('span');
-        textElement.textContent = displayText;
         const nameElement = document.createElement('small');
         nameElement.textContent = message.senderName;
+
+        const textElement = document.createElement('span');
+        textElement.textContent = message.text;
+
+        // Handle reply context
+        if (message.replyToId) {
+            const replyContainer = document.createElement('div');
+            replyContainer.className = 'message-reply';
+            const replyText = document.createElement('span');
+            replyText.textContent = `${message.replyToSender}: ${message.replyToText}`;
+            replyContainer.appendChild(replyText);
+            messageElement.appendChild(replyContainer);
+        }
+
+        // Pin indicator
+        if (message.pinned) {
+            const pinIcon = document.createElement('span');
+            pinIcon.className = 'pin-icon';
+            pinIcon.textContent = '📌';
+            messageElement.appendChild(pinIcon);
+        }
+
         messageElement.appendChild(nameElement);
         messageElement.appendChild(textElement);
         this.messagesContainer.appendChild(messageElement);
-        // Remove new-message class after animation
         setTimeout(() => messageElement.classList.remove('new-message'), 300);
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
 
     handleReceivedMessage(message) {
         if (message.chatId === this.currentChat) {
-            this.displayMessage(message);
+            this.displayMessage(message, message.messageId);
+            if (message.pinned) {
+                this.updatePinnedMessageDisplay(message);
+                console.log('Received pinned message, updating display');
+            }
+        }
+    }
+
+    handleMessageUpdate(data) {
+        if (data.chatId === this.currentChat) {
+            const messageElement = this.messagesContainer.querySelector(`[data-message-id="${data.messageId}"]`);
+            if (messageElement) {
+                const pinIcon = messageElement.querySelector('.pin-icon');
+                if (data.pinned && !pinIcon) {
+                    const newPinIcon = document.createElement('span');
+                    newPinIcon.className = 'pin-icon';
+                    newPinIcon.textContent = '📌';
+                    messageElement.appendChild(newPinIcon);
+                    this.updatePinnedMessageDisplay({ id: data.messageId, text: messageElement.querySelector('span').textContent, senderName: messageElement.querySelector('small').textContent });
+                    console.log('Message pinned, display updated');
+                } else if (!data.pinned && pinIcon) {
+                    pinIcon.remove();
+                    this.updatePinnedMessageDisplay(null);
+                    console.log('Message unpinned, display cleared');
+                }
+            }
+        }
+    }
+
+    handleMessageDelete(data) {
+        if (data.chatId === this.currentChat) {
+            const messageElement = this.messagesContainer.querySelector(`[data-message-id="${data.messageId}"]`);
+            if (messageElement) messageElement.remove();
+            this.updatePinnedMessageDisplay(null); // Recheck pinned status after delete
+            console.log('Message deleted, checking pinned display');
         }
     }
 
@@ -538,18 +618,65 @@ class Chat {
             this.typingIndicator.id = 'typingIndicator';
             this.typingIndicator.className = 'typing-indicator';
             if (this.messagesContainer) {
-                this.messagesContainer.insertBefore(this.typingIndicator, this.messagesContainer.firstChild);
-                console.log('Recreated typingIndicator:', this.typingIndicator);
+                this.messagesContainer.appendChild(this.typingIndicator);
+                console.log('Recreated typingIndicator');
             }
         }
         console.log('Updating typingIndicator, users:', this.typingUsers.size, 'Element:', this.typingIndicator);
         if (this.typingUsers.size > 0) {
             const users = Array.from(this.typingUsers).join(', ');
             this.typingIndicator.textContent = `${users} ${this.typingUsers.size > 1 ? 'are' : 'is'} typing...`;
-            console.log('Set text to:', this.typingIndicator.textContent);
         } else {
             this.typingIndicator.textContent = ''; // Clear text when no one is typing
-            console.log('Cleared text');
+        }
+    }
+
+    updatePinnedMessageDisplay(pinnedMessage) {
+        if (!this.pinnedMessageDisplay) {
+            console.error('pinnedMessageDisplay is NULL, recreating...');
+            this.pinnedMessageDisplay = document.createElement('div');
+            this.pinnedMessageDisplay.id = 'pinnedMessageDisplay';
+            this.pinnedMessageDisplay.className = 'pinned-message';
+            if (this.messagesContainer) {
+                this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild);
+                console.log('Recreated pinnedMessageDisplay at top');
+            }
+        }
+
+        console.log('Updating pinned message display:', pinnedMessage);
+        if (pinnedMessage) {
+            this.pinnedMessageDisplay.classList.remove('hidden');
+            this.pinnedMessageDisplay.innerHTML = `
+                <span>Pinned Message</span>
+                <span>${pinnedMessage.senderName}: ${pinnedMessage.text}</span>
+            `;
+            this.pinnedMessageDisplay.dataset.messageId = pinnedMessage.id;
+            console.log('Pinned message set:', pinnedMessage.text);
+        } else {
+            this.pinnedMessageDisplay.classList.add('hidden');
+            this.pinnedMessageDisplay.innerHTML = '';
+            this.pinnedMessageDisplay.dataset.messageId = '';
+            console.log('No pinned message, display hidden');
+        }
+    }
+
+    navigateToPinnedMessage() {
+        const messageId = this.pinnedMessageDisplay.dataset.messageId;
+        if (messageId) {
+            const messageElement = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+            if (messageElement) {
+                messageElement.scrollIntoView({ behavior: 'smooth' });
+                if (this.highlightTimeout) clearTimeout(this.highlightTimeout);
+                messageElement.classList.add('highlighted');
+                this.highlightTimeout = setTimeout(() => {
+                    messageElement.classList.remove('highlighted');
+                }, 2000); // Highlight for 2 seconds
+                console.log('Navigated to pinned message:', messageId);
+            } else {
+                console.warn('Pinned message element not found:', messageId);
+            }
+        } else {
+            console.warn('No messageId in pinnedMessageDisplay');
         }
     }
 
@@ -593,18 +720,14 @@ class Chat {
         }
 
         try {
-            // Get all users and filter client-side for better partial matches
             const usersSnapshot = await this.db.collection('users').get();
-            
             this.friendSearchResults.innerHTML = '';
             let foundUsers = false;
 
             usersSnapshot.forEach(doc => {
                 const user = { id: doc.id, ...doc.data() };
-                // Skip current user
                 if (user.id === this.currentUser.uid) return;
 
-                // Check if username or mobile contains search term
                 const username = (user.username || '').toLowerCase();
                 const mobile = (user.mobile || '').toLowerCase();
                 
@@ -616,13 +739,11 @@ class Chat {
                         <span>${user.username} ${user.mobile ? `(${user.mobile})` : ''}</span>
                         <button class="friend-request-btn" data-uid="${user.id}">Send Friend Request</button>
                     `;
-                    
                     const button = friendItem.querySelector('.friend-request-btn');
                     button.addEventListener('click', (e) => {
                         const uid = e.currentTarget.getAttribute('data-uid');
                         this.sendFriendRequest(uid);
                     });
-                    
                     this.friendSearchResults.appendChild(friendItem);
                 }
             });
@@ -638,7 +759,6 @@ class Chat {
     }
 
     async sendFriendRequest(friendUid) {
-        // Debugging - let's see what we're receiving
         console.log('Friend UID received:', friendUid);
         console.log('Current user:', this.currentUser);
     
@@ -660,7 +780,6 @@ class Chat {
         }
     
         try {
-            // Create the chat document
             const chatRef = await this.db.collection('chats').add({
                 participants: [this.currentUser.uid, friendUid],
                 creatorId: this.currentUser.uid,
@@ -668,10 +787,9 @@ class Chat {
                 type: 'dm',
                 status: 'pending'
             });
-    
+
             console.log('Friend request chat created with ID:', chatRef.id);
             
-            // Use socket to notify the recipient
             this.socket?.emit('friend:request:send', {
                 requesterId: this.currentUser.uid,
                 requesterName: this.currentUser.username,
@@ -681,7 +799,6 @@ class Chat {
             
             alert('Friend request sent successfully!');
             this.friendSearchModal.style.display = 'none';
-    
         } catch (error) {
             console.error('Error sending friend request:', error);
             alert(`Failed to send request: ${error.message}`);
@@ -690,14 +807,11 @@ class Chat {
 
     handleFriendRequestReceived(data) {
         console.log('Friend request received:', data);
-        // Update UI to show new request
         this.loadChats();
-        // Optional: Show notification
         alert(`You received a friend request from ${data.requesterName || 'Unknown user'}`);
     }
 
     listenForFriendRequests() {
-        // Query for pending friend requests where user is a participant
         this.db.collection('chats')
             .where('participants', 'array-contains', this.currentUser.uid)
             .where('status', '==', 'pending')
@@ -707,7 +821,6 @@ class Chat {
                     if (change.type === 'added') {
                         const data = change.doc.data();
                         console.log('New friend request detected:', data);
-                        // Update UI or show notification
                         alert(`You received a friend request! Check your chats list.`);
                         this.loadChats();
                     }
@@ -731,34 +844,26 @@ class Chat {
             const requesterId = chatData.creatorId;
             
             if (accept) {
-                // Update chat status to active
                 await chatRef.update({
                     status: 'active'
                 });
-                
-                // Notify the requester
                 this.socket?.emit('friend:request:respond', {
                     chatId,
                     requesterId,
                     recipientId: this.currentUser.uid,
                     status: true
                 });
-                
                 alert('Friend request accepted!');
                 this.loadChats();
                 this.selectChat(chatId);
             } else {
-                // Delete the chat document
                 await chatRef.delete();
-                
-                // Notify the requester of rejection
                 this.socket?.emit('friend:request:respond', {
                     chatId,
                     requesterId,
                     recipientId: this.currentUser.uid,
                     status: false
                 });
-                
                 alert('Friend request rejected.');
                 this.loadChats();
             }
@@ -777,7 +882,6 @@ class Chat {
         }
     }
 
-    // New reset method to handle logout
     reset() {
         this.currentChat = null;
         this.currentUser = null;
@@ -786,7 +890,144 @@ class Chat {
         if (this.messageInput) this.messageInput.disabled = true;
         if (this.typingUsers) this.typingUsers.clear();
         if (this.typingIndicator) this.typingIndicator.textContent = '';
+        if (this.pinnedMessageDisplay) this.pinnedMessageDisplay.classList.add('hidden');
+        this.cancelReply(); // Clear reply state on reset
         console.log('Chat reset');
+    }
+
+    // New methods for message options
+    startLongPress(messageElement, e) {
+        this.longPressTimeout = setTimeout(() => {
+            this.showMessageOptions(messageElement);
+        }, 500); // 500ms long-press threshold
+    }
+
+    async showMessageOptions(messageElement) {
+        const messageId = messageElement.dataset.messageId;
+        const senderId = messageElement.classList.contains('sent') ? this.currentUser.uid : null;
+        const isSender = senderId === this.currentUser.uid;
+        const chatDoc = this.db.collection('chats').doc(this.currentChat).get();
+        const isAdmin = (await chatDoc).data().participants.includes(this.currentUser.uid) && this.currentUser.uid === (await chatDoc).data().creatorId;
+
+        // Remove existing options if any
+        const existingOptions = messageElement.querySelector('.message-options');
+        if (existingOptions) existingOptions.remove();
+
+        const options = document.createElement('div');
+        options.className = 'message-options';
+        options.innerHTML = `
+            <button class="option-btn" data-action="reply">Reply</button>
+            <button class="option-btn" data-action="pin">Pin</button>
+            ${isSender || isAdmin ? '<button class="option-btn" data-action="delete">Delete</button>' : ''}
+        `;
+        messageElement.appendChild(options);
+
+        // Add event listeners to options
+        options.querySelectorAll('.option-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = e.target.dataset.action;
+                this.handleOptionAction(action, messageElement, messageId);
+                options.remove(); // Remove options after action
+            });
+        });
+
+        // Hide options on click outside
+        document.addEventListener('click', this.hideOptionsOnOutsideClick.bind(this, options), { once: true });
+    }
+
+    hideOptionsOnOutsideClick(options, e) {
+        if (!options.contains(e.target) && e.target.closest('.message') !== options.parentElement) {
+            options.remove();
+        }
+    }
+
+    async handleOptionAction(action, messageElement, messageId) {
+        const senderId = messageElement.classList.contains('sent') ? this.currentUser.uid : null;
+        const isSender = senderId === this.currentUser.uid;
+        const chatDoc = await this.db.collection('chats').doc(this.currentChat).get();
+        const isAdmin = chatDoc.data().participants.includes(this.currentUser.uid) && this.currentUser.uid === chatDoc.data().creatorId;
+
+        switch (action) {
+            case 'reply':
+                this.startReply(messageElement);
+                break;
+            case 'pin':
+                if (isSender || isAdmin) {
+                    await this.pinMessage(messageId, messageElement);
+                } else {
+                    alert('Only the sender or admin can pin messages!');
+                }
+                break;
+            case 'delete':
+                if (isSender || isAdmin) {
+                    await this.deleteMessage(messageId);
+                } else {
+                    alert('You can only delete your own messages or if you are an admin!');
+                }
+                break;
+        }
+    }
+
+    async pinMessage(messageId, messageElement) {
+        const messageRef = this.db.collection('chats').doc(this.currentChat).collection('messages').doc(messageId);
+        const doc = await messageRef.get();
+        if (doc.exists) {
+            const pinned = !doc.data().pinned;
+            await messageRef.update({ pinned });
+            const notify = confirm('Notify all members about this pinned message?');
+            this.socket?.emit('message:update', { chatId: this.currentChat, messageId, pinned, notify });
+            if (pinned && !messageElement.querySelector('.pin-icon')) {
+                const pinIcon = document.createElement('span');
+                pinIcon.className = 'pin-icon';
+                pinIcon.textContent = '📌';
+                messageElement.appendChild(pinIcon);
+            } else if (!pinned && messageElement.querySelector('.pin-icon')) {
+                messageElement.querySelector('.pin-icon').remove();
+            }
+            this.updatePinnedMessageDisplay({ id: messageId, text: messageElement.querySelector('span').textContent, senderName: messageElement.querySelector('small').textContent });
+            console.log('Pinned message updated in display');
+        }
+    }
+
+    async deleteMessage(messageId) {
+        const messageRef = this.db.collection('chats').doc(this.currentChat).collection('messages').doc(messageId);
+        await messageRef.delete();
+        this.socket?.emit('message:delete', { chatId: this.currentChat, messageId });
+        const messageElement = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageElement) messageElement.remove();
+    }
+
+    // Existing reply methods
+    startReply(messageElement) {
+        const messageId = messageElement.dataset.messageId;
+        const senderName = messageElement.querySelector('small').textContent;
+        const text = messageElement.querySelector('span').textContent.replace(/\n/g, ' '); // Remove newlines for display
+        this.replyingTo = { id: messageId, senderName, text };
+        this.updateReplyUI();
+    }
+
+    updateReplyUI() {
+        const replyContainer = document.createElement('div');
+        replyContainer.className = 'reply-container';
+        const replyBox = document.createElement('div');
+        replyBox.className = 'reply-box';
+        replyBox.innerHTML = `
+            <span class="reply-text">${this.replyingTo.senderName}: ${this.replyingTo.text}</span>
+            <button class="cancel-reply">✖</button>
+        `;
+        replyContainer.appendChild(replyBox);
+        if (!document.querySelector('.reply-container')) {
+            this.messageForm.insertBefore(replyContainer, this.messageInput.parentElement);
+        }
+        replyBox.querySelector('.cancel-reply').addEventListener('click', () => this.cancelReply());
+    }
+
+    cancelReply() {
+        this.replyingTo = null;
+        const replyContainer = document.querySelector('.reply-container');
+        if (replyContainer) {
+            replyContainer.remove();
+        }
     }
 }
 
