@@ -7,7 +7,9 @@ class Chat {
         this.typingUsers = new Set();
         this.typingTimeout = null;
         this.replyingTo = null; // Track the message being replied to
-        this.highlightTimeout = null; // For highlighting pinned message
+        this.highlightTimeout = null; // For highlighting (can be removed if no longer needed)
+        this.longPressTimeout = null; // For mobile long-press
+        this.isScrolling = false; // Flag to prevent multiple scrolls
 
         // Initialize Socket.IO with error handling
         this.initializeSocket();
@@ -75,18 +77,8 @@ class Chat {
             console.log('Typing indicator created and appended');
         }
 
-        // Create pinned message display if missing
-        if (this.messagesContainer && !document.getElementById('pinnedMessageDisplay')) {
-            this.pinnedMessageDisplay = document.createElement('div');
-            this.pinnedMessageDisplay.id = 'pinnedMessageDisplay';
-            this.pinnedMessageDisplay.className = 'pinned-message';
-            this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild); // Insert at top
-            console.log('Pinned message display created and inserted at top');
-        } else {
-            this.pinnedMessageDisplay = document.getElementById('pinnedMessageDisplay');
-            this.pinnedMessageDisplay.classList.remove('hidden'); // Ensure it's visible by default
-            console.log('Pinned message display found in DOM');
-        }
+        // Remove pinned message display creation since pin feature is removed
+        // this.pinnedMessageDisplay = document.getElementById('pinnedMessageDisplay');
 
         // Make sure sidebar is initially visible on desktop and hidden on mobile
         this.updateSidebarVisibility();
@@ -198,8 +190,8 @@ class Chat {
             }
         });
 
-        // Pinned message display click listener
-        this.pinnedMessageDisplay?.addEventListener('click', () => this.navigateToPinnedMessage());
+        // Remove pinned message display click listener
+        // this.pinnedMessageDisplay?.addEventListener('click', handlePinnedClick);
     }
 
     createOrShowOverlay() {
@@ -423,22 +415,14 @@ class Chat {
                 this.messagesContainer.appendChild(this.typingIndicator);
                 console.log('New typing indicator created');
             }
-            this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild); // Ensure pinned display is at the top
-            console.log('Pinned message display re-positioned at top');
+            // Remove pinned message display re-positioning
+            // this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild);
 
-            // Load pinned messages first
-            const pinnedMessages = [];
             messagesSnapshot.forEach(doc => {
                 const message = { ...doc.data(), id: doc.id };
-                if (message.pinned) {
-                    pinnedMessages.push(message);
-                } else {
-                    this.displayMessage(message, doc.id);
-                }
+                this.displayMessage(message, doc.id);
             });
-            pinnedMessages.forEach(message => this.displayMessage(message, message.id));
 
-            this.updatePinnedMessageDisplay(pinnedMessages.length > 0 ? pinnedMessages[pinnedMessages.length - 1] : null);
             this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
         } catch (error) {
             console.error('Error loading messages:', error);
@@ -556,13 +540,13 @@ class Chat {
             messageElement.appendChild(replyContainer);
         }
 
-        // Pin indicator
-        if (message.pinned) {
-            const pinIcon = document.createElement('span');
-            pinIcon.className = 'pin-icon';
-            pinIcon.textContent = '📌';
-            messageElement.appendChild(pinIcon);
-        }
+        // Remove pin indicator
+        // if (message.pinned) {
+        //     const pinIcon = document.createElement('span');
+        //     pinIcon.className = 'pin-icon';
+        //     pinIcon.textContent = '📌';
+        //     messageElement.appendChild(pinIcon);
+        // }
 
         messageElement.appendChild(nameElement);
         messageElement.appendChild(textElement);
@@ -574,10 +558,6 @@ class Chat {
     handleReceivedMessage(message) {
         if (message.chatId === this.currentChat) {
             this.displayMessage(message, message.messageId);
-            if (message.pinned) {
-                this.updatePinnedMessageDisplay(message);
-                console.log('Received pinned message, updating display');
-            }
         }
     }
 
@@ -585,19 +565,15 @@ class Chat {
         if (data.chatId === this.currentChat) {
             const messageElement = this.messagesContainer.querySelector(`[data-message-id="${data.messageId}"]`);
             if (messageElement) {
-                const pinIcon = messageElement.querySelector('.pin-icon');
-                if (data.pinned && !pinIcon) {
-                    const newPinIcon = document.createElement('span');
-                    newPinIcon.className = 'pin-icon';
-                    newPinIcon.textContent = '📌';
-                    messageElement.appendChild(newPinIcon);
-                    this.updatePinnedMessageDisplay({ id: data.messageId, text: messageElement.querySelector('span').textContent, senderName: messageElement.querySelector('small').textContent });
-                    console.log('Message pinned, display updated');
-                } else if (!data.pinned && pinIcon) {
-                    pinIcon.remove();
-                    this.updatePinnedMessageDisplay(null);
-                    console.log('Message unpinned, display cleared');
-                }
+                // Remove pin-related updates
+                // if (data.pinned && !messageElement.querySelector('.pin-icon')) {
+                //     const newPinIcon = document.createElement('span');
+                //     newPinIcon.className = 'pin-icon';
+                //     newPinIcon.textContent = '📌';
+                //     messageElement.appendChild(newPinIcon);
+                // } else if (!data.pinned && messageElement.querySelector('.pin-icon')) {
+                //     messageElement.querySelector('.pin-icon').remove();
+                // }
             }
         }
     }
@@ -606,8 +582,6 @@ class Chat {
         if (data.chatId === this.currentChat) {
             const messageElement = this.messagesContainer.querySelector(`[data-message-id="${data.messageId}"]`);
             if (messageElement) messageElement.remove();
-            this.updatePinnedMessageDisplay(null); // Recheck pinned status after delete
-            console.log('Message deleted, checking pinned display');
         }
     }
 
@@ -631,54 +605,135 @@ class Chat {
         }
     }
 
-    updatePinnedMessageDisplay(pinnedMessage) {
-        if (!this.pinnedMessageDisplay) {
-            console.error('pinnedMessageDisplay is NULL, recreating...');
-            this.pinnedMessageDisplay = document.createElement('div');
-            this.pinnedMessageDisplay.id = 'pinnedMessageDisplay';
-            this.pinnedMessageDisplay.className = 'pinned-message';
-            if (this.messagesContainer) {
-                this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild);
-                console.log('Recreated pinnedMessageDisplay at top');
-            }
-        }
+    // Remove updatePinnedMessageDisplay method
+    // updatePinnedMessageDisplay(pinnedMessage) {
+    //     if (!this.pinnedMessageDisplay) {
+    //         console.error('pinnedMessageDisplay is NULL, recreating...');
+    //         this.pinnedMessageDisplay = document.createElement('div');
+    //         this.pinnedMessageDisplay.id = 'pinnedMessageDisplay';
+    //         this.pinnedMessageDisplay.className = 'pinned-message';
+    //         if (this.messagesContainer) {
+    //             this.messagesContainer.insertBefore(this.pinnedMessageDisplay, this.messagesContainer.firstChild);
+    //             console.log('Recreated pinnedMessageDisplay at top');
+    //         }
+    //     }
 
-        console.log('Updating pinned message display:', pinnedMessage);
-        if (pinnedMessage) {
-            this.pinnedMessageDisplay.classList.remove('hidden');
-            this.pinnedMessageDisplay.innerHTML = `
-                <span>Pinned Message</span>
-                <span>${pinnedMessage.senderName}: ${pinnedMessage.text}</span>
-            `;
-            this.pinnedMessageDisplay.dataset.messageId = pinnedMessage.id;
-            console.log('Pinned message set:', pinnedMessage.text);
-        } else {
-            this.pinnedMessageDisplay.classList.add('hidden');
-            this.pinnedMessageDisplay.innerHTML = '';
-            this.pinnedMessageDisplay.dataset.messageId = '';
-            console.log('No pinned message, display hidden');
-        }
-    }
+    //     console.log('Updating pinned message display:', pinnedMessage);
+    //     if (pinnedMessage) {
+    //         this.pinnedMessageDisplay.classList.remove('hidden');
+    //         this.pinnedMessageDisplay.innerHTML = `
+    //             <span>Pinned Message</span>
+    //             <span>${pinnedMessage.senderName}: ${pinnedMessage.text}</span>
+    //         `;
+    //         this.pinnedMessageDisplay.dataset.messageId = pinnedMessage.id;
+    //         console.log('Pinned message set:', pinnedMessage.text);
+    //     } else {
+    //         this.pinnedMessageDisplay.classList.add('hidden');
+    //         this.pinnedMessageDisplay.innerHTML = '';
+    //         this.pinnedMessageDisplay.dataset.messageId = '';
+    //         console.log('No pinned message, display hidden');
+    //     }
+    // }
 
-    navigateToPinnedMessage() {
-        const messageId = this.pinnedMessageDisplay.dataset.messageId;
-        if (messageId) {
-            const messageElement = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
-            if (messageElement) {
-                messageElement.scrollIntoView({ behavior: 'smooth' });
-                if (this.highlightTimeout) clearTimeout(this.highlightTimeout);
-                messageElement.classList.add('highlighted');
-                this.highlightTimeout = setTimeout(() => {
-                    messageElement.classList.remove('highlighted');
-                }, 2000); // Highlight for 2 seconds
-                console.log('Navigated to pinned message:', messageId);
-            } else {
-                console.warn('Pinned message element not found:', messageId);
-            }
-        } else {
-            console.warn('No messageId in pinnedMessageDisplay');
-        }
-    }
+    // Remove navigateToPinnedMessage method
+    // navigateToPinnedMessage() {
+    //     if (this.isScrollingToPinned) return;
+    //     this.isScrollingToPinned = true;
+        
+    //     const messageId = this.pinnedMessageDisplay.dataset.messageId;
+    //     if (!messageId) {
+    //         console.warn('No messageId in pinnedMessageDisplay');
+    //         this.isScrollingToPinned = false;
+    //         return;
+    //     }
+        
+    //     const scrollToMessage = (element) => {
+    //         if (!element) return false;
+            
+    //         const messageRect = element.getBoundingClientRect();
+    //         const containerRect = this.messagesContainer.getBoundingClientRect();
+    //         const messageHeight = messageRect.height;
+    //         const containerHeight = containerRect.height;
+            
+    //         const currentScrollTop = this.messagesContainer.scrollTop;
+    //         const messageOffsetTop = element.offsetTop;
+    //         const targetScroll = Math.max(0, messageOffsetTop - (containerHeight / 2) + (messageHeight / 2));
+            
+    //         const visibleCenterStart = containerRect.top + containerHeight * 0.25;
+    //         const visibleCenterEnd = containerRect.top + containerHeight * 0.75;
+            
+    //         const messageCenterY = messageRect.top + (messageHeight / 2);
+    //         const isCentered = messageCenterY >= visibleCenterStart && messageCenterY <= visibleCenterEnd;
+            
+    //         if (!isCentered) {
+    //             this.messagesContainer.scrollTo({ top: targetScroll, behavior: 'smooth' });
+    //             console.log('Scrolled to pinned message', {
+    //                 targetScroll,
+    //                 messageOffsetTop,
+    //                 messageHeight,
+    //                 containerHeight,
+    //                 currentScrollTop,
+    //                 isCentered,
+    //                 messageCenterY,
+    //                 visibleCenterStart,
+    //                 visibleCenterEnd
+    //             });
+    //         } else {
+    //             console.log('Message already centered, not scrolling', {
+    //                 messageCenterY,
+    //                 visibleCenterStart,
+    //                 visibleCenterEnd
+    //             });
+    //         }
+            
+    //         if (this.highlightTimeout) {
+    //             clearTimeout(this.highlightTimeout);
+    //             element.classList.remove('highlighted');
+    //             setTimeout(() => {
+    //                 void element.offsetWidth;
+    //                 element.classList.add('highlighted');
+    //                 console.log('Highlight added to message:', messageId);
+    //                 this.highlightTimeout = setTimeout(() => {
+    //                     element.classList.remove('highlighted');
+    //                     console.log('Highlight removed from message:', messageId);
+    //                 }, 2000);
+    //             }, 50);
+    //         } else {
+    //             element.classList.add('highlighted');
+    //             console.log('Highlight added to message:', messageId);
+    //             this.highlightTimeout = setTimeout(() => {
+    //                 element.classList.remove('highlighted');
+    //                 console.log('Highlight removed from message:', messageId);
+    //             }, 2000);
+    //         }
+            
+    //         return true;
+    //     };
+        
+    //     const messageElement = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        
+    //     if (scrollToMessage(messageElement)) {
+    //         setTimeout(() => {
+    //             this.isScrollingToPinned = false;
+    //         }, 800);
+    //     } else {
+    //         console.warn('Pinned message element not found:', messageId);
+    //         this.loadMessages(this.currentChat)
+    //             .then(() => {
+    //                 const retryElement = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+    //                 if (scrollToMessage(retryElement)) {
+    //                     console.log('Successfully found and scrolled to message after reload');
+    //                 } else {
+    //                     console.error('Retry failed: Pinned message still not found');
+    //                 }
+    //                 this.isScrollingToPinned = false;
+    //             })
+    //             .catch(error => {
+    //                 console.error('Error loading messages:', error);
+    //                 this.isScrollingToPinned = false;
+    //             });
+    //     }
+    // }
 
     requestToJoin(chatId) {
         console.log('Sending join request for chat:', chatId);
@@ -890,7 +945,8 @@ class Chat {
         if (this.messageInput) this.messageInput.disabled = true;
         if (this.typingUsers) this.typingUsers.clear();
         if (this.typingIndicator) this.typingIndicator.textContent = '';
-        if (this.pinnedMessageDisplay) this.pinnedMessageDisplay.classList.add('hidden');
+        // Remove pinned message display reset
+        // if (this.pinnedMessageDisplay) this.pinnedMessageDisplay.classList.add('hidden');
         this.cancelReply(); // Clear reply state on reset
         console.log('Chat reset');
     }
@@ -906,8 +962,8 @@ class Chat {
         const messageId = messageElement.dataset.messageId;
         const senderId = messageElement.classList.contains('sent') ? this.currentUser.uid : null;
         const isSender = senderId === this.currentUser.uid;
-        const chatDoc = this.db.collection('chats').doc(this.currentChat).get();
-        const isAdmin = (await chatDoc).data().participants.includes(this.currentUser.uid) && this.currentUser.uid === (await chatDoc).data().creatorId;
+        const chatDoc = await this.db.collection('chats').doc(this.currentChat).get();
+        const isAdmin = chatDoc.data().participants.includes(this.currentUser.uid) && this.currentUser.uid === chatDoc.data().creatorId;
 
         // Remove existing options if any
         const existingOptions = messageElement.querySelector('.message-options');
@@ -917,7 +973,6 @@ class Chat {
         options.className = 'message-options';
         options.innerHTML = `
             <button class="option-btn" data-action="reply">Reply</button>
-            <button class="option-btn" data-action="pin">Pin</button>
             ${isSender || isAdmin ? '<button class="option-btn" data-action="delete">Delete</button>' : ''}
         `;
         messageElement.appendChild(options);
@@ -951,13 +1006,6 @@ class Chat {
             case 'reply':
                 this.startReply(messageElement);
                 break;
-            case 'pin':
-                if (isSender || isAdmin) {
-                    await this.pinMessage(messageId, messageElement);
-                } else {
-                    alert('Only the sender or admin can pin messages!');
-                }
-                break;
             case 'delete':
                 if (isSender || isAdmin) {
                     await this.deleteMessage(messageId);
@@ -965,27 +1013,6 @@ class Chat {
                     alert('You can only delete your own messages or if you are an admin!');
                 }
                 break;
-        }
-    }
-
-    async pinMessage(messageId, messageElement) {
-        const messageRef = this.db.collection('chats').doc(this.currentChat).collection('messages').doc(messageId);
-        const doc = await messageRef.get();
-        if (doc.exists) {
-            const pinned = !doc.data().pinned;
-            await messageRef.update({ pinned });
-            const notify = confirm('Notify all members about this pinned message?');
-            this.socket?.emit('message:update', { chatId: this.currentChat, messageId, pinned, notify });
-            if (pinned && !messageElement.querySelector('.pin-icon')) {
-                const pinIcon = document.createElement('span');
-                pinIcon.className = 'pin-icon';
-                pinIcon.textContent = '📌';
-                messageElement.appendChild(pinIcon);
-            } else if (!pinned && messageElement.querySelector('.pin-icon')) {
-                messageElement.querySelector('.pin-icon').remove();
-            }
-            this.updatePinnedMessageDisplay({ id: messageId, text: messageElement.querySelector('span').textContent, senderName: messageElement.querySelector('small').textContent });
-            console.log('Pinned message updated in display');
         }
     }
 
